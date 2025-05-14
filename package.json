@@ -1,0 +1,38 @@
+{
+  "name": "cashu-cache",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "@cashu/cashu-ts": "^2.2.2",
+    "@gandlaf21/bolt11-decode": "^3.1.1",
+    "@noble/curves": "^1.8.1",
+    "@noble/hashes": "^1.7.1",
+    "canvas-confetti": "^1.9.3",
+    "nostr-tools": "2.10.3",
+    "toastr": "^2.1.4",
+    "jquery": "^3.7.1"
+  },
+  "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/toastr": "^2.1.43",
+    "eslint": "^9.22.0",
+    "eslint-config-prettier": "^10.1.1",
+    "prettier": "^3.5.3",
+    "terser-webpack-plugin": "5.3.10",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.2",
+    "webpack": "^5.95.0",
+    "webpack-bundle-analyzer": "^4.10.2",
+    "webpack-cli": "5.1.4"
+  },
+  "scripts": {
+    "build": "webpack --node-env=production",
+    "build:dev": "webpack --node-env=development",
+    "analyze": "webpack --analyze",
+    "lint": "eslint --ext .js ./",
+    "format": "prettier --write .",
+    "checkformat": "prettier --check ."
+  },
+  "sideEffects": false
+}

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cashu Cache</title>
+    <meta
+      name="description"
+      content="Create a NIP-60 compliant Cashu Wallet"
+    />
+    <meta property="og:title" content="Cashu Cache" />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:description"
+      content="Cashu Cache lets you create a NIP-60 compliant Cashu Wallet and advertizes the NIP-61 public key so you can receive NutZaps. It also makes a backup of the wallet so you never lose the private key."
+    />
+    <meta property="og:url" content="https://www.nostrly.com/cashu-cache/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="src/style.css" media="all" />
+    <link rel='stylesheet' href='public/toastr.min.css' media='all'/>
+    <script src="/public/cashu-cache.min.js"></script>
+  </head>
+
+  <body>
+    <noscript>JavaScript is required to run this application</noscript>
+    <div id="nip60-wallet-form">
+        <div class="center">
+            <button type="submit" id="open-wallet">Fetch Existing Wallet</button>
+        </div>
+        <div>
+            <label for="mint-select">Mints (one per line):</label>
+            <select id="mint-select" name="mint-select">
+                <option value="" disabled selected>Loading mints...</option>
+            </select>
+            <textarea id="mints" name="mints" rows="4" placeholder="https://mint.minibits.cash/Bitcoin&#10;https://stablenut.cashu.network"></textarea>
+            <div class="description">Choose the NUT-11 compliant mints you are comfortable using. If a mint is not in the list, it may not be NUT-11 compliant, or is not known to <a href="https://audit.8333.space" target="_blank">Cashu Auditor</a> (in which case, <a href="https://audit.8333.space" target="_blank">donating a token from that mint</a> will add it to the list)</div>
+        </div>
+        <div>
+            <label for="relays">Relays (one per line):</label>
+            <div id="relays-container">
+                <textarea id="relays" name="relays" rows="4" placeholder="wss://relay.damus.io\nwss://nostr.mom"></textarea>
+                <button type="button" id="get-relays" class="button">Add My Relays</button>
+            </div>
+            <div class="description">These are the Nostr relays where your ecash will be stored (max recommended 2-4). Use the button to fetch your relays if using a NIP-07 extension.</div>
+        </div>
+        <div id="update-options">
+            <div class="label">Wallet Update Options:</div>
+            <label for="rotate-keys">
+                <input type="checkbox" id="rotate-keys" checked disabled>
+                Rotate your wallet key
+            </label>
+            <div class="description">Adds a new private key and NIP-61 public locking key to your wallet. Rotating keys improves privacy. You will be able to copy your key(s) in the last step.</div>
+        </div>
+        <div class="center">
+            <button type="submit" id="create-wallet" disabled>Create Wallet</button>
+            <div class="description" id="create-warning"><strong>WARNING:</strong> This will replace any existing wallet. To preserve keys, fetch your existing wallet first.</div>
+            <div class="description">Note: You should <a href="https://www.nostrly.com/cashu-gather/">gather any unclaimed NutZaps</a> before updating your wallet.</div>
+        </div>
+    </div>
+    <div id="nip60-wallet-success" class="center hidden">
+        <h2>Your Wallet Private Key(s)</h2>
+        <div class="description">These are your NIP-60 wallet's private key(s) in nsec format. The first is your live key, the rest are old keys. It's important to keep them safe and backed up. You can optionally also import them as P2PK keys in a wallet like Cashu.me</div>
+        <input type="text" id="live-key" readonly class="live-key" placeholder="Live key will appear here">
+        <textarea id="old-keys" rows="4" placeholder="Previous private keys (if any)"></textarea>
+        <p>
+            <button id="copy-nsec" class="button">Copy NSEC Format</button>
+            <button id="copy-hex" class="button">Copy HEX Format</button>
+        </p>
+    </div>
+  </body>
+</html>
