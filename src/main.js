@@ -1,10 +1,8 @@
 import jQuery from "jquery"; // We are not in WordPress now, Dorothy...
 import {
-  SimplePool,
   generateSecretKey,
   getPublicKey,
   nip19,
-  finalizeEvent,
 } from "nostr-tools";
 import { getNut11Mints } from "./nut11.ts";
 import { copyTextToClipboard, debounce, delay } from "./utils.ts";
