@@ -12,73 +12,9 @@ import toastr from "toastr";
 import confetti from "canvas-confetti";
 import { decode } from "@gandlaf21/bolt11-decode";
 
-export const getTokenAmount = (proofs: Array<Proof>): number => {
-  return proofs.reduce((acc, proof) => {
-    return acc + proof.amount;
-  }, 0);
-};
+type CurrencyUnit = "btc" | "sat" | "msat" | string;
+const TOKEN_HISTORY_KEY = "cashu.lockedTokens";
 
-export const formatAmount = (amount: number, unit?: string): string => {
-  if (!unit) {
-    unit = "sat";
-  }
-  if (unit === "sat") {
-    return formatSats(amount);
-  }
-  if (unit === "msat") {
-    return formatMSats(amount);
-  } else {
-    return formatFiat(amount, unit);
-  }
-};
-
-const formatSats = (amount: number): string => {
-  return "₿ " + new Intl.NumberFormat("en-US").format(amount) + " sat";
-};
-
-const formatMSats = (amount: number): string => {
-  return (
-    "₿ " +
-    new Intl.NumberFormat("en-US", {
-      minimumFractionDigits: 3,
-      maximumFractionDigits: 3,
-    }).format(amount / 1000) +
-    " sat"
-  );
-};
-
-export const getUnitSymbol = (unit: string, isLong = true): string => {
-  switch (unit) {
-    case "sat":
-      return "₿" + (isLong ? " (sat)" : "");
-    case "msat":
-      return "₿" + (isLong ? " (msat)" : "");
-    case "btc":
-      return "₿" + (isLong ? " (btc)" : "");
-    case "usd":
-      return "$" + (isLong ? " (usd)" : "");
-    case "eur":
-      return "€" + (isLong ? " (eur)" : "");
-    case "gbp":
-      return "£" + (isLong ? " (gbp)" : "");
-    case "jpy":
-      return "¥" + (isLong ? " (jpy)" : "");
-    case "krw":
-      return "₩" + (isLong ? " (krw)" : "");
-    default:
-      return unit;
-  }
-};
-const formatFiat = (amount: number, unit?: string): string => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-    currency: unit?.toUpperCase(),
-  }).format(amount / 100);
-};
-
-// Define the stored/returned mint data shape
 interface MintData {
   keys: MintKeys[];
   keysets: MintKeyset[];
@@ -86,12 +22,89 @@ interface MintData {
   lastUpdated: number;
 }
 
-// Store mint data in localStorage
-function storeMintData(mintUrl: string, mintData: MintData): void {
-  localStorage.setItem(`cashu.mint.${mintUrl}`, JSON.stringify(mintData));
+interface NutLockEntry {
+  date: string;
+  name: string;
+  token: string;
+  amount: number;
 }
 
-// Store mint proofs to localStorage, ensuring uniqueness by secret
+/**
+ * Gets the token amount by summing its proof amounts
+ * @param {Array<Proof>} Array of proofs to sum
+ * @return {number} The token amount
+ */
+export const getTokenAmount = (proofs: Array<Proof>): number => {
+  return proofs.reduce((acc, proof) => {
+    return acc + proof.amount;
+  }, 0);
+};
+
+/**
+ * Formats an amount into a locale-specific string based on the specified unit.
+ * NB: Amount is expected to be in the minor unit of the currency
+ * eg sats for Bitcoin, cents for USD etc
+ *
+ * @param {number} amount - The amount to format
+ * @param {CurrencyUnit} unit - The currency unit of the amount. Defaults to sat.
+ * @param {string} locale - The locale for formatting (eg: 'en-US', 'fr-FR'). Defaults to 'en-US'.
+ * @returns {string} A formatted string (eg: '₿ 1.23456789 BTC', '$123.45').
+ * @throws Logs a warning and returns a fallback string for invalid units or locales.
+ */
+export const formatAmount = (
+  amount: number,
+  unit: CurrencyUnit = "sat",
+  locale: string = "en-US",
+): string => {
+  const upperUnit = unit.toUpperCase();
+  const bitcoinUnits: Record<
+    string,
+    { minorUnit: number; prefix: string; suffix: string }
+  > = {
+    BTC: { minorUnit: 8, prefix: "₿ ", suffix: " BTC" },
+    SAT: { minorUnit: 0, prefix: "₿ ", suffix: " sat" },
+    MSAT: { minorUnit: 3, prefix: "₿ ", suffix: " sat" },
+  };
+  let minorUnit: number;
+  let prefix = "";
+  let suffix = "";
+  let options: Intl.NumberFormatOptions = {};
+  if (upperUnit in bitcoinUnits) {
+    // Handle Bitcoin units
+    ({ minorUnit, prefix, suffix } = bitcoinUnits[upperUnit]);
+  } else {
+    // Handle Fiat currencies
+    // prettier-ignore
+    const specialMinorUnits: Record<string, number> = {
+      BHD: 3, BIF: 0, CLF: 4, CLP: 0, DJF: 0, GNF: 0,
+      IQD: 3, ISK: 0, JOD: 3, JPY: 0, KMF: 0, KRW: 0,
+      KWD: 3, LYD: 3, OMR: 3, PYG: 0, RWF: 0, TND: 3,
+      UGX: 0, UYI: 0, UYW: 4, VND: 0, VUV: 0, XAF: 0,
+      XOF: 0, XPF: 0
+    };
+    // Apply correct minor unit adjustment (default: 2)
+    minorUnit = specialMinorUnits[upperUnit] ?? 2;
+    options = { style: "currency", currency: upperUnit };
+  }
+  // Adjust to major unit for display
+  const adjustedAmount = amount / 10 ** minorUnit;
+  options.minimumFractionDigits = minorUnit;
+  options.maximumFractionDigits = minorUnit;
+  try {
+    const formatter = new Intl.NumberFormat(locale, options);
+    return prefix + formatter.format(adjustedAmount) + suffix;
+  } catch (error) {
+    console.warn(`Invalid unit or locale: ${unit}, ${locale}`, error);
+    return `${amount} ${unit}`;
+  }
+};
+
+/**
+ * Store mint proofs to localStorage, ensuring uniqueness by secret
+ * @param {string}       mintUrl The mint url
+ * @param {Array<Proof>} proofs  Array of proofs to store
+ * @param {boolean}      replace Overwrites proofs in store if true (default: false)
+ */
 export function storeMintProofs(
   mintUrl: string,
   proofs: Array<Proof>,
@@ -115,22 +128,22 @@ export function storeMintProofs(
   localStorage.setItem(`cashu.proofs.${mintUrl}`, JSON.stringify(finalProofs));
 }
 
-// Get mint proofs from localStorage
+/**
+ * Get mint proofs from localStorage
+ * @param  {string}       mintUrl The Mint URL
+ * @return {Array<Proof>}         Array of stored proofs
+ */
 export function getMintProofs(mintUrl: string): Array<Proof> {
   const stored: string | null = localStorage.getItem(`cashu.proofs.${mintUrl}`);
   return stored ? JSON.parse(stored) : [];
 }
 
-// Define the NutLock history entry
-interface NutLockEntry {
-  date: string;
-  name: string;
-  token: string;
-  amount: number;
-}
-const TOKEN_HISTORY_KEY = "cashu.lockedTokens";
-
-// Store a new locked token with metadata in localStorage
+/**
+ * Stores a new locked token with metadata in localStorage
+ * @param {string} token  token to store
+ * @param {number} amount amound of token
+ * @param {string} name   label for locked token
+ */
 export function storeLockedToken(
   token: string,
   amount: number,
@@ -147,7 +160,10 @@ export function storeLockedToken(
   localStorage.setItem(TOKEN_HISTORY_KEY, JSON.stringify(updated));
 }
 
-// Get the history of locked tokens from localStorage
+/**
+ * Gets the locked token history from localStorage
+ * @return {NutLockEntry[]} [description]
+ */
 export function getLockedTokens(): NutLockEntry[] {
   const stored = localStorage.getItem(TOKEN_HISTORY_KEY);
   if (!stored) {
@@ -163,12 +179,43 @@ export function getLockedTokens(): NutLockEntry[] {
   }
 }
 
-// Get the history of locked tokens from localStorage
+/**
+ * Clears locked token history from localStorage
+ */
 export function clearLockedTokens(): void {
   localStorage.removeItem(TOKEN_HISTORY_KEY);
 }
 
-export async function loadMint(mintUrl: string): Promise<MintData> {
+/**
+ * Instantiates a Cashu wallet for a specified mint and unit
+ * @param  {string} mintUrl The mint URL
+ * @param  {CurrencyUnit} unit    The wallet unit (default: sat)
+ * @return {Promise<CashuWallet>} A promise to return the wallet
+ */
+export const getWalletWithUnit = async (
+  mintUrl: string,
+  unit: CurrencyUnit = "sat",
+): Promise<CashuWallet> => {
+  const mintData = await loadMint(mintUrl);
+  const mint = new CashuMint(mintUrl);
+  const keys = mintData.keys.filter((ks) => ks.unit === unit);
+  const keysets = mintData.keysets.filter((ks) => ks.unit === unit);
+  // console.log("keys:>>", keys);
+  // console.log("keysets:>>", keysets);
+  const wallet = new CashuWallet(mint, {
+    keys,
+    keysets,
+    mintInfo: mintData.info,
+    unit,
+  });
+  return wallet;
+};
+
+function storeMintData(mintUrl: string, mintData: MintData): void {
+  localStorage.setItem(`cashu.mint.${mintUrl}`, JSON.stringify(mintData));
+}
+
+async function loadMint(mintUrl: string): Promise<MintData> {
   const stored: string | null = localStorage.getItem(`cashu.mint.${mintUrl}`);
   const cachedData: MintData | null = stored ? JSON.parse(stored) : null;
   try {
@@ -216,24 +263,24 @@ export async function loadMint(mintUrl: string): Promise<MintData> {
   }
 }
 
-export const getWalletWithUnit = async (
-  mintUrl: string,
-  unit = "sat",
-): Promise<CashuWallet> => {
-  const mintData = await loadMint(mintUrl);
-  const mint = new CashuMint(mintUrl);
-  const keys = mintData.keys.filter((ks) => ks.unit === unit);
-  const keysets = mintData.keysets.filter((ks) => ks.unit === unit);
-  console.log("keys:>>", keys);
-  console.log("keysets:>>", keysets);
-  const wallet = new CashuWallet(mint, {
-    keys,
-    keysets,
-    mintInfo: mintData.info,
-    unit,
-  });
-  return wallet;
-};
+/**
+ * Copies text to clipboard, with fallback for localhost operation
+ * @param {string} text Text to copy
+ */
+export function copyTextToClipboard(text: string) {
+  if (!navigator.clipboard) {
+    fallbackCopyTextToClipboard(text);
+    return;
+  }
+  navigator.clipboard.writeText(text).then(
+    function () {
+      toastr.info("copied!");
+    },
+    function (err) {
+      console.error("Async: Could not copy text: ", err);
+    },
+  );
+}
 
 function fallbackCopyTextToClipboard(text: string) {
   var textArea = document.createElement("textarea");
@@ -259,21 +306,10 @@ function fallbackCopyTextToClipboard(text: string) {
 
   document.body.removeChild(textArea);
 }
-export function copyTextToClipboard(text: string) {
-  if (!navigator.clipboard) {
-    fallbackCopyTextToClipboard(text);
-    return;
-  }
-  navigator.clipboard.writeText(text).then(
-    function () {
-      toastr.info("copied!");
-    },
-    function (err) {
-      console.error("Async: Could not copy text: ", err);
-    },
-  );
-}
 
+/**
+ * Activates the confetti bomb effect
+ */
 export function doConfettiBomb() {
   // Do the confetti bomb
   var duration = 0.25 * 1000; //secs
@@ -307,9 +343,20 @@ export function doConfettiBomb() {
   confetti.reset();
 }
 
+/**
+ * Returns apromise to create a delay
+ * @param {number} Delay time in ms
+ * @example await delay(1000); // waits 1 second
+ */
 export const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-// Debounce utility function
+/**
+ * Debounces a function for delay milliseconds to prevent excessive calls.
+ *
+ * @param func - Function to debounce.
+ * @param delay - Delay in milliseconds.
+ * @returns Debounced function with the same parameters as `func`.
+ */
 export const debounce = <T extends (...args: any[]) => void>(
   func: T,
   delay: number,
@@ -322,7 +369,7 @@ export const debounce = <T extends (...args: any[]) => void>(
 };
 
 /**
- * Gets the invoice amount in sats
+ * Gets the invoice amount in sats for a lightning invoice
  * @param {string} lnInvoice The LN Invoice
  */
 export const getSatsAmount = (lnInvoice: string) => {
